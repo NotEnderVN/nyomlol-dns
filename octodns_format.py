@@ -1,0 +1,109 @@
+#!/usr/bin/env python3
+"""
+octodns-format: Format and validate natural ordering of octoDNS zone YAML files.
+"""
+
+import argparse
+import glob
+import io
+import os
+import sys
+from octodns.yaml import safe_dump, safe_load
+
+
+def format_file(file_path: str, check: bool = False) -> bool:
+    """
+    Formats a single YAML file.
+    Returns True if the file was changed (or would be changed), False otherwise.
+    """
+    try:
+        with open(file_path, "r", encoding="utf-8") as fh:
+            original = fh.read()
+    except OSError as err:
+        print(f"Error reading {file_path}: {err}", file=sys.stderr)
+        return False
+
+    try:
+        data = safe_load(original, enforce_order=False)
+    except Exception as err:
+        print(f"Error parsing YAML in {file_path}: {err}", file=sys.stderr)
+        raise
+
+    if data is None:
+        return False
+
+    buf = io.StringIO()
+    safe_dump(data, buf, allow_unicode=True, order_mode="natural")
+    formatted = buf.getvalue()
+
+    if original != formatted:
+        if check:
+            print(f"Format check failed: {file_path} needs formatting", file=sys.stderr)
+            return True
+        with open(file_path, "w", encoding="utf-8") as fh:
+            fh.write(formatted)
+        print(f"Formatted: {file_path}")
+        return True
+
+    return False
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Format octoDNS YAML zone files into natural order."
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Check if files are formatted without writing changes. Exits with 1 if changes needed.",
+    )
+    parser.add_argument(
+        "files",
+        nargs="*",
+        help="Zone files or glob patterns to format (default: zones/*.yaml)",
+    )
+
+    args = parser.parse_args()
+
+    file_patterns = args.files or ["zones/*.yaml"]
+    target_files = []
+
+    for pattern in file_patterns:
+        matched = glob.glob(pattern)
+        if matched:
+            target_files.extend(matched)
+        elif os.path.isfile(pattern):
+            target_files.append(pattern)
+
+    if not target_files:
+        print(f"No files matched pattern(s): {file_patterns}", file=sys.stderr)
+        sys.exit(0)
+
+    target_files = sorted(set(target_files))
+
+    has_diff = False
+    has_error = False
+
+    for path in target_files:
+        try:
+            if format_file(path, check=args.check):
+                has_diff = True
+        except Exception:
+            has_error = True
+
+    if has_error:
+        sys.exit(1)
+
+    if args.check and has_diff:
+        print(
+            "\nOne or more zone files require formatting. Run 'octodns-format' to format them.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if args.check:
+        print(f"All {len(target_files)} zone file(s) are properly formatted.")
+
+
+if __name__ == "__main__":
+    main()

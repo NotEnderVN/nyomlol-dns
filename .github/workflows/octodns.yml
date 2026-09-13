@@ -1,0 +1,67 @@
+name: OctoDNS
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      doit:
+        description: 'Apply changes to Cloudflare (leave unchecked for dry-run)'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: octodns-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  octodns:
+    name: OctoDNS (${{ github.event_name }})
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          echo "${{ github.workspace }}/bin" >> $GITHUB_PATH
+
+      - name: Validate zone formatting (octodns-format)
+        run: octodns-format --check zones/*.yaml
+
+      - name: Validate OctoDNS configuration (octodns-validate)
+        run: octodns-validate --config-file config.yaml
+
+      - name: OctoDNS dry-run plan (Pull Request)
+        if: github.event_name == 'pull_request'
+        env:
+          CLOUDFLARE_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+        run: |
+          if [ -n "$CLOUDFLARE_TOKEN" ]; then
+            octodns-sync --config-file config.yaml
+          else
+            echo "::warning::CLOUDFLARE_TOKEN is not set; skipping live plan preview against Cloudflare."
+          fi
+
+      - name: OctoDNS Sync (Push to main / workflow_dispatch)
+        if: (github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && inputs.doit == true)
+        env:
+          CLOUDFLARE_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+        run: |
+          octodns-sync --config-file config.yaml --doit

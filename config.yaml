@@ -1,0 +1,18 @@
+---
+providers:
+  config:
+    class: octodns.provider.yaml.YamlProvider
+    directory: ./zones
+    enforce_order: true
+    escaped_semicolons: false
+
+  cloudflare:
+    class: octodns_cloudflare.CloudflareProvider
+    token: env/CLOUDFLARE_TOKEN/dummy
+
+zones:
+  nyom.lol.:
+    sources:
+      - config
+    targets:
+      - cloudflare

@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "octodns-config"
+version = "0.1.0"
+description = "OctoDNS configuration and utilities"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "octodns>=1.22.0",
+    "octodns-cloudflare>=1.2.0",
+]
+scripts = { octodns-format = "octodns_format:main" }
